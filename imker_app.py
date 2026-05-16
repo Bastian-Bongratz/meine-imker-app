@@ -6,7 +6,11 @@ from datetime import datetime
 
 # --- GOOGLE SHEETS VERBINDUNG ---
 def hole_google_tabelle():
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    # Wir geben dem Bot Zugriff auf Sheets UND Drive, um Authentisierungsfehler zu vermeiden
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
     
     # Holt sich die Zugangsdaten aus den Streamlit Secrets
     info = dict(st.secrets["gcp_service_account"])
@@ -30,12 +34,14 @@ def speichere_in_google(blatt_name, daten):
             worksheet = tabelle.worksheet(blatt_name)
         except gspread.exceptions.WorksheetNotFound:
             worksheet = tabelle.add_worksheet(title=blatt_name, rows="100", cols="20")
+            # Erste Zeile mit Überschriften füllen, falls das Blatt neu ist
             überschriften = ["Datum"] + list(daten.keys())
             worksheet.append_row(überschriften)
             
         jetzt = datetime.now().strftime("%d.%m.%Y")
         eintrag = [jetzt] + list(daten.values())
         
+        # Zeile in Google Sheets anhängen
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich in Google Sheets ({blatt_name}) gespeichert! 🐝")
     except Exception as e:
