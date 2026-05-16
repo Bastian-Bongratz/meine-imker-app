@@ -6,11 +6,12 @@ from datetime import datetime
 
 # --- GOOGLE SHEETS VERBINDUNG ---
 def hole_google_tabelle():
-    # Holt sich die Zugangsdaten aus den Streamlit Secrets
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
     
-    # Hier reparieren wir eventuelle Formatierungsfehler im Schlüssel automatisch:
+    # Holt sich die Zugangsdaten aus den Streamlit Secrets
     info = dict(st.secrets["gcp_service_account"])
+    
+    # Übersetzt die \n im Schlüssel wieder in echte Zeilenumbrüche für Google:
     if "private_key" in info:
         info["private_key"] = info["private_key"].replace("\\n", "\n")
         
@@ -29,14 +30,12 @@ def speichere_in_google(blatt_name, daten):
             worksheet = tabelle.worksheet(blatt_name)
         except gspread.exceptions.WorksheetNotFound:
             worksheet = tabelle.add_worksheet(title=blatt_name, rows="100", cols="20")
-            # Erste Zeile mit Überschriften füllen, falls das Blatt neu ist
             überschriften = ["Datum"] + list(daten.keys())
             worksheet.append_row(überschriften)
             
         jetzt = datetime.now().strftime("%d.%m.%Y")
         eintrag = [jetzt] + list(daten.values())
         
-        # Zeile in Google Sheets anhängen
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich in Google Sheets ({blatt_name}) gespeichert! 🐝")
     except Exception as e:
@@ -66,7 +65,6 @@ elif kategorie == "🔍 Durchschau":
     notiz = st.text_area("Bemerkung")
     
     if st.button("Durchschau speichern"):
-        # Speichert alle Durchsichten zentral im Blatt "Durchschau"
         daten = {"Volk": v_nr, "Königin": k_vorh, "Stifte": stifte, "Sanftmut": sanftmut, "Schwarm": schwarm, "Notiz": notiz}
         speichere_in_google("Durchschau", daten)
 
