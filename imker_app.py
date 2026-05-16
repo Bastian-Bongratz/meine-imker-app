@@ -25,24 +25,23 @@ def speichere_in_google(blatt_name, daten_dict):
     try:
         tabelle = hole_google_tabelle()
         
-        # Sucht nach dem jeweiligen Tabellenblatt
         try:
             worksheet = tabelle.worksheet(blatt_name)
         except gspread.exceptions.WorksheetNotFound:
-            # Falls das Blatt fehlt, wird es automatisch erstellt
             worksheet = tabelle.add_worksheet(title=blatt_name, rows="500", cols="20")
-            überschriften = ["Datum"] + list(daten_dict.keys())
-            worksheet.append_row(überschriften)
             
-        # Falls das Blatt existiert, aber komplett leer ist, Überschriften einfügen
-        if not worksheet.get_all_values():
+        # Wir holen alle Werte, um zu sehen, ob das Blatt wirklich leer ist
+        alle_werte = worksheet.get_all_values()
+        
+        # Wenn das Blatt komplett leer ist ODER die erste Zelle leer ist: Überschriften in Zeile 1 knallen!
+        if not alle_werte or len(alle_werte) == 0 or (len(alle_werte) == 1 and alle_werte[0] == []):
             überschriften = ["Datum"] + list(daten_dict.keys())
-            worksheet.append_row(überschriften)
+            worksheet.insert_row(überschriften, 1)
             
         jetzt = datetime.now().strftime("%d.%m.%Y")
         eintrag = [jetzt] + list(daten_dict.values())
         
-        # Zeile in Google Sheets anhängen
+        # Wir hängen den Eintrag direkt hinten an die bestehenden Zeilen an
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
     except Exception as e:
@@ -55,7 +54,6 @@ def speichere_in_google(blatt_name, daten_dict):
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
-# Alle 7 Menüpunkte sind wieder da!
 kategorie = st.sidebar.radio("MENÜ", ["Dashboard", "🔍 Durchschau", "📋 Bestandsbuch", "🍯 Honigernte", "🥣 Fütterung", "📦 Lager", "✅ Todo/Termine"])
 
 if kategorie == "Dashboard":
@@ -68,7 +66,6 @@ if kategorie == "Dashboard":
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     
-    # Hier ist deine originale, detaillierte Eingabemaske wieder da!
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     k_vorh = st.radio("Königin vorhanden?", ["Nein", "Ja"], index=0)
     stifte = st.radio("Stifte / Brut?", ["Nein", "Ja"], index=0)
@@ -89,7 +86,6 @@ elif kategorie == "🔍 Durchschau":
 
 elif kategorie == "📋 Bestandsbuch":
     st.header("Amtlicher Arzneimittel-Nachweis")
-    
     v_liste = st.text_input("Welche Völker? (z.B. 1, 2, 3)")
     mittel = st.text_input("Arzneimittel & Charge")
     menge = st.text_input("Dosierung")
@@ -106,7 +102,6 @@ elif kategorie == "📋 Bestandsbuch":
 
 elif kategorie == "🍯 Honigernte":
     st.header("Ernte erfassen")
-    
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     sorte = st.selectbox("Sorte", ["Frühtracht", "Raps", "Wald", "Sommertracht"])
     kg = st.number_input("Menge in kg", min_value=0.0, step=0.5)
@@ -121,7 +116,6 @@ elif kategorie == "🍯 Honigernte":
 
 elif kategorie == "🥣 Fütterung":
     st.header("Fütterung eintragen")
-    
     v_liste = st.text_input("Völker / Stand")
     futterart = st.selectbox("Futtertyp", ["Sirup (ApiInvert)", "Zuckerwasser 3:2", "Zuckerwasser 1:1", "Futterteig"])
     menge_l = st.number_input("Menge (Liter / kg)", min_value=0.0, step=0.5)
@@ -136,8 +130,8 @@ elif kategorie == "🥣 Fütterung":
 
 elif kategorie == "📦 Lager":
     st.header("Lagerbestand & Inventar")
-    st.write("Hier kannst du später deine Zargen, Rähmchen oder Honiggläser zählen.")
+    st.write("Lager-Funktion bereit.")
 
 elif kategorie == "✅ Todo/Termine":
     st.header("Anstehende Aufgaben")
-    st.write("Hier listen wir bald deine ToDos auf, wie z.B. 'Varroa-Behandlung im Juli' oder 'Königinnen verschulen'.")
+    st.write("Termine-Funktion bereit.")
