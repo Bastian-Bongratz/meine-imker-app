@@ -6,10 +6,15 @@ from datetime import datetime
 
 # --- GOOGLE SHEETS VERBINDUNG ---
 def hole_google_tabelle():
-    # Holt sich die Zugangsdaten aus den Streamlit Secrets
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-    client = gspread.authorize(creds)
+   # ERSETZE ES DURCH DIESEN BLOCK:
+scope = ["https://www.googleapis.com/auth/spreadsheets"]
+# Hier reparieren wir eventuelle Formatierungsfehler im Schlüssel automatisch:
+info = dict(st.secrets["gcp_service_account"])
+if "private_key" in info:
+    info["private_key"] = info["private_key"].replace("\\n", "\n")
+
+creds = Credentials.from_service_account_info(info, scopes=scope)
+client = gspread.authorize(creds)
     
     # Öffnet deine Google-Tabelle (Name muss exakt stimmen!)
     return client.open("Imker_Daten")
