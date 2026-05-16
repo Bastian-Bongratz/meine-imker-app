@@ -32,7 +32,8 @@ def speichere_in_google(blatt_name, daten_dict):
             
         alle_werte = worksheet.get_all_values()
         
-        if not alle_werte or len(alle_werte) == 0:
+        # Absolute Sicherheit: Wenn die Tabelle komplett leer ist, Überschriften zuerst!
+        if not alle_werte or len(alle_werte) == 0 or alle_werte == [[]]:
             überschriften = ["Datum"] + list(daten_dict.keys())
             worksheet.append_row(überschriften)
             
@@ -42,7 +43,7 @@ def speichere_in_google(blatt_name, daten_dict):
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
         
-        # Cache leeren, damit die Historie sich nach dem Speichern sofort aktualisiert
+        # Cache leeren, damit die Historie sofort aktualisiert wird
         st.cache_data.clear()
         
     except Exception as e:
@@ -53,7 +54,7 @@ def speichere_in_google(blatt_name, daten_dict):
             st.error(f"Fehler beim Speichern: {e}")
 
 # --- DATEN FÜR HISTORIE LADEN ---
-@st.cache_data(ttl=60)  # Lädt die Daten alle 60 Sekunden neu oder wenn gespeichert wird
+@st.cache_data(ttl=10)  # Extrem kurzes TTL, damit neue Einträge sofort sichtbar sind
 def lade_historie(blatt_name):
     try:
         tabelle = hole_google_tabelle()
@@ -99,14 +100,13 @@ if kategorie == "Dashboard":
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     
-    # --- 1. NEUEN EINTRAG ERFASSEN ---
     st.subheader("📝 Neue Durchschau eintragen")
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=0)
     
     k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
     k_farbe = hole_farb_info(k_jahr)
-    st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} is: **{k_farbe}**")
+    st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
     
     stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=0)
     sanftmut = st.select_slider("Sanftmut", options=["1", "2", "3", "4", "5"], value="5")
@@ -126,26 +126,19 @@ elif kategorie == "🔍 Durchschau":
         }
         speichere_in_google("Durchschau", daten)
 
-    # --- 2. AUTOMATISCHES VÖLKER-ARCHIV ---
+    # --- HISTORIE ---
     st.markdown("---")
     st.subheader("🗂️ Kartenindex / Völker-Historie")
     
     df_durchschau = lade_historie("Durchschau")
     
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
-        # Erstellt eine saubere Liste aller existierenden Völker aus der Tabelle
         alle_voelker = sorted(df_durchschau["Volk"].unique())
-        
-        # Volk auswählen für den Filter
         ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker)
-        
-        # Filtert die Tabelle nach dem ausgewählten Volk
         df_gefiltert = df_durchschau[df_durchschau["Volk"] == ausgewaehltes_volk]
-        
-        # Zeigt die Einträge an (neueste oben)
         st.dataframe(df_gefiltert.iloc[::-1], use_container_width=True)
     else:
-        st.info("Sobald du den ersten Eintrag gespeichert hast, siehst du hier dein Völker-Archiv!")
+        st.info("Sobald du einen Eintrag mit Überschriften gespeichert hast, siehst du hier dein Völker-Archiv!")
 
 elif kategorie == "👑 Königinnen-Zucht":
     st.header("👑 Königinnen-Zucht & Umlav-Planer")
