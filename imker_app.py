@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- GOOGLE SHEETS VERBINDUNG ---
 def hole_google_tabelle():
@@ -51,7 +51,27 @@ def speichere_in_google(blatt_name, daten_dict):
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
-kategorie = st.sidebar.radio("MENÜ", ["Dashboard", "🔍 Durchschau", "📋 Bestandsbuch", "🍯 Honigernte", "🥣 Fütterung", "📦 Lager", "✅ Todo/Termine"])
+# Jetzt mit 8 Menüpunkten inkl. Zucht!
+kategorie = st.sidebar.radio("MENÜ", [
+    "Dashboard", 
+    "🔍 Durchschau", 
+    "👑 Königinnen-Zucht", 
+    "📋 Bestandsbuch", 
+    "🍯 Honigernte", 
+    "🥣 Fütterung", 
+    "📦 Lager", 
+    "✅ Todo/Termine"
+])
+
+# Hilfsfunktion für die Königinnenfarben
+def hole_farb_info(jahr):
+    endziffer = str(jahr)[-1]
+    if endziffer in ["1", "6"]: return "🤍 Weiß"
+    elif endziffer in ["2", "7"]: return "💛 Gelb"
+    elif endziffer in ["3", "8"]: return "❤️ Rot"
+    elif endziffer in ["4", "9"]: return "💚 Grün"
+    elif endziffer in ["5", "0"]: return "💙 Blau"
+    return "Unbekannt"
 
 if kategorie == "Dashboard":
     st.subheader("Übersicht")
@@ -64,8 +84,14 @@ elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
-    k_vorh = st.radio("Königin vorhanden?", ["Nein", "Ja"], index=0)
-    stifte = st.radio("Stifte / Brut?", ["Nein", "Ja"], index=0)
+    k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=0)
+    
+    # Intelligente Alters- und Farbauswahl für die Königin
+    k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
+    k_farbe = hole_farb_info(k_jahr)
+    st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
+    
+    stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=0)
     sanftmut = st.select_slider("Sanftmut", options=["1", "2", "3", "4", "5"], value="5")
     schwarm = st.select_slider("Schwarmstimmung", options=["1", "2", "3", "4", "5"], value="1")
     notiz = st.text_area("Bemerkung / ToDos")
@@ -73,13 +99,45 @@ elif kategorie == "🔍 Durchschau":
     if st.button("Durchschau speichern"):
         daten = {
             "Volk": v_nr, 
-            "Königin": k_vorh, 
+            "Königin vorhanden": k_vorh, 
+            "Königin Jahr": k_jahr,
+            "Königin Farbe": k_farbe,
             "Stifte / Brut": stifte, 
             "Sanftmut": sanftmut, 
             "Schwarmstimmung": schwarm, 
             "Bemerkung": notiz
         }
         speichere_in_google("Durchschau", daten)
+
+elif kategorie == "👑 Königinnen-Zucht":
+    st.header("👑 Königinnen-Zucht & Umlav-Planer")
+    
+    zucht_name = st.text_input("Zuchtserie Bezeichnung", value="Serie 1 - 2026")
+    umlauftag = st.date_input("Umlavdatum / Start", datetime.now())
+    anzahl_larven = st.number_input("Anzahl umgelavte Larven", min_value=1, value=10, step=1)
+    
+    # Automatische Berechnung der wichtigen Imker-Zuchtdaten
+    deckelung = umlauftag + timedelta(days=5)
+    verschulen = umlauftag + timedelta(days=11)
+    schlupf = umlauftag + timedelta(days=12)
+    
+    st.subheader("📅 Wichtige Termine für diese Serie:")
+    st.warning(f"🔒 **Caging / Verschulen (Tag 11):** {verschulen.strftime('%d.%m.%Y')}")
+    st.success(f"🐣 **Erwarteter Schlupf (Tag 12):** {schlupf.strftime('%d.%m.%Y')}")
+    st.info(f"🪹 Capped / Deckelung (Tag 5): {deckelung.strftime('%d.%m.%Y')}")
+    
+    zucht_notiz = st.text_input("Notizen zur Herkunft (Zuchtmutter)")
+    
+    if st.button("Zuchtserie in Google Sheets sichern"):
+        daten = {
+            "Zucht-Serie": zucht_name,
+            "Umlavdatum": umlauftag.strftime("%d.%m.%Y"),
+            "Larven Anzahl": anzahl_larven,
+            "Verschul-Datum": verschulen.strftime("%d.%m.%Y"),
+            "Schlupf-Datum": schlupf.strftime("%d.%m.%Y"),
+            "Herkunft/Notiz": zucht_notiz
+        }
+        speichere_in_google("Zucht", daten)
 
 elif kategorie == "📋 Bestandsbuch":
     st.header("Amtlicher Arzneimittel-Nachweis")
@@ -127,8 +185,6 @@ elif kategorie == "🥣 Fütterung":
 
 elif kategorie == "📦 Lager":
     st.header("Lagerbestand & Inventar")
-    
-    # Hier sind deine neuen Lager-Felder:
     artikel = st.selectbox("Artikel / Zubehör", ["Zargen (Dadant/Zander)", "Rähmchen (Leergut)", "Rähmchen (mit Mittelwänden)", "Honiggläser (500g)", "Honiggläser (250g)", "Futterzargen", "Sonstiges"])
     menge_lager = st.number_input("Anzahl / Menge", min_value=0, step=1)
     lager_notiz = st.text_input("Anmerkung (z.B. Zustand, Lagerort)")
@@ -143,9 +199,7 @@ elif kategorie == "📦 Lager":
 
 elif kategorie == "✅ Todo/Termine":
     st.header("Anstehende Aufgaben")
-    
-    # Hier sind deine neuen ToDo-Felder:
-    aufgabe = st.text_input("Was ist zu tun? (z.B. Varroa-Behandlung, Königinnen verschulen)")
+    aufgabe = st.text_input("Was ist zu tun? (z.B. Varroa-Behandlung)")
     stand_todo = st.text_input("Welcher Bienenstand?", value="Stand 1")
     erledigen_bis = st.date_input("Erledigen bis wann?", datetime.now())
     prio = st.select_slider("Dringlichkeit", options=["Niedrig", "Normal", "Wichtig", "🚨 Eilt sehr!"], value="Normal")
