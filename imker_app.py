@@ -30,18 +30,15 @@ def speichere_in_google(blatt_name, daten_dict):
         except gspread.exceptions.WorksheetNotFound:
             worksheet = tabelle.add_worksheet(title=blatt_name, rows="500", cols="20")
             
-        # Wir holen alle Werte, um zu sehen, ob das Blatt wirklich leer ist
         alle_werte = worksheet.get_all_values()
         
-        # Wenn das Blatt komplett leer ist ODER die erste Zelle leer ist: Überschriften in Zeile 1 knallen!
-        if not alle_werte or len(alle_werte) == 0 or (len(alle_werte) == 1 and alle_werte[0] == []):
+        if not alle_werte or len(alle_werte) == 0:
             überschriften = ["Datum"] + list(daten_dict.keys())
-            worksheet.insert_row(überschriften, 1)
+            worksheet.append_row(überschriften)
             
         jetzt = datetime.now().strftime("%d.%m.%Y")
         eintrag = [jetzt] + list(daten_dict.values())
         
-        # Wir hängen den Eintrag direkt hinten an die bestehenden Zeilen an
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
     except Exception as e:
@@ -130,8 +127,34 @@ elif kategorie == "🥣 Fütterung":
 
 elif kategorie == "📦 Lager":
     st.header("Lagerbestand & Inventar")
-    st.write("Lager-Funktion bereit.")
+    
+    # Hier sind deine neuen Lager-Felder:
+    artikel = st.selectbox("Artikel / Zubehör", ["Zargen (Dadant/Zander)", "Rähmchen (Leergut)", "Rähmchen (mit Mittelwänden)", "Honiggläser (500g)", "Honiggläser (250g)", "Futterzargen", "Sonstiges"])
+    menge_lager = st.number_input("Anzahl / Menge", min_value=0, step=1)
+    lager_notiz = st.text_input("Anmerkung (z.B. Zustand, Lagerort)")
+    
+    if st.button("Bestand aktualisieren"):
+        daten = {
+            "Artikel": artikel,
+            "Menge": menge_lager,
+            "Anmerkung": lager_notiz
+        }
+        speichere_in_google("Lager", daten)
 
 elif kategorie == "✅ Todo/Termine":
     st.header("Anstehende Aufgaben")
-    st.write("Termine-Funktion bereit.")
+    
+    # Hier sind deine neuen ToDo-Felder:
+    aufgabe = st.text_input("Was ist zu tun? (z.B. Varroa-Behandlung, Königinnen verschulen)")
+    stand_todo = st.text_input("Welcher Bienenstand?", value="Stand 1")
+    erledigen_bis = st.date_input("Erledigen bis wann?", datetime.now())
+    prio = st.select_slider("Dringlichkeit", options=["Niedrig", "Normal", "Wichtig", "🚨 Eilt sehr!"], value="Normal")
+    
+    if st.button("Aufgabe eintragen"):
+        daten = {
+            "Aufgabe": aufgabe,
+            "Stand": stand_todo,
+            "Fällig am": erledigen_bis.strftime("%d.%m.%Y"),
+            "Priorität": prio
+        }
+        speichere_in_google("Termine", daten)
