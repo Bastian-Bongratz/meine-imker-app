@@ -41,17 +41,34 @@ def speichere_in_google(blatt_name, daten_dict):
         
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
+        
+        # Cache leeren, damit die Historie sich nach dem Speichern sofort aktualisiert
+        st.cache_data.clear()
+        
     except Exception as e:
         if "200" in str(e):
             st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
+            st.cache_data.clear()
         else:
             st.error(f"Fehler beim Speichern: {e}")
+
+# --- DATEN FÜR HISTORIE LADEN ---
+@st.cache_data(ttl=60)  # Lädt die Daten alle 60 Sekunden neu oder wenn gespeichert wird
+def lade_historie(blatt_name):
+    try:
+        tabelle = hole_google_tabelle()
+        worksheet = tabelle.worksheet(blatt_name)
+        alle_zeilen = worksheet.get_all_records()
+        if alle_zeilen:
+            return pd.DataFrame(alle_zeilen)
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 # --- APP DESIGN ---
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
-# Jetzt mit 8 Menüpunkten inkl. Zucht!
 kategorie = st.sidebar.radio("MENÜ", [
     "Dashboard", 
     "🔍 Durchschau", 
@@ -63,7 +80,6 @@ kategorie = st.sidebar.radio("MENÜ", [
     "✅ Todo/Termine"
 ])
 
-# Hilfsfunktion für die Königinnenfarben
 def hole_farb_info(jahr):
     endziffer = str(jahr)[-1]
     if endziffer in ["1", "6"]: return "🤍 Weiß"
@@ -83,13 +99,14 @@ if kategorie == "Dashboard":
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     
+    # --- 1. NEUEN EINTRAG ERFASSEN ---
+    st.subheader("📝 Neue Durchschau eintragen")
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=0)
     
-    # Intelligente Alters- und Farbauswahl für die Königin
     k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
     k_farbe = hole_farb_info(k_jahr)
-    st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
+    st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} is: **{k_farbe}**")
     
     stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=0)
     sanftmut = st.select_slider("Sanftmut", options=["1", "2", "3", "4", "5"], value="5")
@@ -109,6 +126,27 @@ elif kategorie == "🔍 Durchschau":
         }
         speichere_in_google("Durchschau", daten)
 
+    # --- 2. AUTOMATISCHES VÖLKER-ARCHIV ---
+    st.markdown("---")
+    st.subheader("🗂️ Kartenindex / Völker-Historie")
+    
+    df_durchschau = lade_historie("Durchschau")
+    
+    if not df_durchschau.empty and "Volk" in df_durchschau.columns:
+        # Erstellt eine saubere Liste aller existierenden Völker aus der Tabelle
+        alle_voelker = sorted(df_durchschau["Volk"].unique())
+        
+        # Volk auswählen für den Filter
+        ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker)
+        
+        # Filtert die Tabelle nach dem ausgewählten Volk
+        df_gefiltert = df_durchschau[df_durchschau["Volk"] == ausgewaehltes_volk]
+        
+        # Zeigt die Einträge an (neueste oben)
+        st.dataframe(df_gefiltert.iloc[::-1], use_container_width=True)
+    else:
+        st.info("Sobald du den ersten Eintrag gespeichert hast, siehst du hier dein Völker-Archiv!")
+
 elif kategorie == "👑 Königinnen-Zucht":
     st.header("👑 Königinnen-Zucht & Umlav-Planer")
     
@@ -116,7 +154,6 @@ elif kategorie == "👑 Königinnen-Zucht":
     umlauftag = st.date_input("Umlavdatum / Start", datetime.now())
     anzahl_larven = st.number_input("Anzahl umgelavte Larven", min_value=1, value=10, step=1)
     
-    # Automatische Berechnung der wichtigen Imker-Zuchtdaten
     deckelung = umlauftag + timedelta(days=5)
     verschulen = umlauftag + timedelta(days=11)
     schlupf = umlauftag + timedelta(days=12)
