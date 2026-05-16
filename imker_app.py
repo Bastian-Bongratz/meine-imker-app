@@ -32,7 +32,6 @@ def speichere_in_google(blatt_name, daten_dict):
             
         alle_werte = worksheet.get_all_values()
         
-        # Absolute Sicherheit: Wenn die Tabelle komplett leer ist, Überschriften zuerst!
         if not alle_werte or len(alle_werte) == 0 or alle_werte == [[]]:
             überschriften = ["Datum"] + list(daten_dict.keys())
             worksheet.append_row(überschriften)
@@ -42,8 +41,6 @@ def speichere_in_google(blatt_name, daten_dict):
         
         worksheet.append_row(eintrag)
         st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
-        
-        # Cache leeren, damit die Historie sofort aktualisiert wird
         st.cache_data.clear()
         
     except Exception as e:
@@ -54,7 +51,7 @@ def speichere_in_google(blatt_name, daten_dict):
             st.error(f"Fehler beim Speichern: {e}")
 
 # --- DATEN FÜR HISTORIE LADEN ---
-@st.cache_data(ttl=10)  # Extrem kurzes TTL, damit neue Einträge sofort sichtbar sind
+@st.cache_data(ttl=10)
 def lade_historie(blatt_name):
     try:
         tabelle = hole_google_tabelle()
@@ -70,6 +67,7 @@ def lade_historie(blatt_name):
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
+# Jetzt mit 9 Menüpunkten inklusive Kassenbuch!
 kategorie = st.sidebar.radio("MENÜ", [
     "Dashboard", 
     "🔍 Durchschau", 
@@ -78,6 +76,7 @@ kategorie = st.sidebar.radio("MENÜ", [
     "🍯 Honigernte", 
     "🥣 Fütterung", 
     "📦 Lager", 
+    "💰 Kassenbuch",
     "✅ Todo/Termine"
 ])
 
@@ -99,7 +98,6 @@ if kategorie == "Dashboard":
 
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
-    
     st.subheader("📝 Neue Durchschau eintragen")
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=0)
@@ -113,7 +111,7 @@ elif kategorie == "🔍 Durchschau":
     schwarm = st.select_slider("Schwarmstimmung", options=["1", "2", "3", "4", "5"], value="1")
     notiz = st.text_area("Bemerkung / ToDos")
     
-    if st.button("Durchschau speichern"):
+    if st.button("Durchschau保存"):
         daten = {
             "Volk": v_nr, 
             "Königin vorhanden": k_vorh, 
@@ -126,12 +124,9 @@ elif kategorie == "🔍 Durchschau":
         }
         speichere_in_google("Durchschau", daten)
 
-    # --- HISTORIE ---
     st.markdown("---")
     st.subheader("🗂️ Kartenindex / Völker-Historie")
-    
     df_durchschau = lade_historie("Durchschau")
-    
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
         alle_voelker = sorted(df_durchschau["Volk"].unique())
         ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker)
@@ -142,7 +137,6 @@ elif kategorie == "🔍 Durchschau":
 
 elif kategorie == "👑 Königinnen-Zucht":
     st.header("👑 Königinnen-Zucht & Umlav-Planer")
-    
     zucht_name = st.text_input("Zuchtserie Bezeichnung", value="Serie 1 - 2026")
     umlauftag = st.date_input("Umlavdatum / Start", datetime.now())
     anzahl_larven = st.number_input("Anzahl umgelavte Larven", min_value=1, value=10, step=1)
@@ -226,6 +220,24 @@ elif kategorie == "📦 Lager":
             "Anmerkung": lager_notiz
         }
         speichere_in_google("Lager", daten)
+
+elif kategorie == "💰 Kassenbuch":
+    st.header("💰 Imker-Kassenbuch")
+    
+    # Hier sind deine Finanzfelder
+    art = st.radio("Buchungsart", ["🟢 Einnahme", "🔴 Ausgabe"], index=0)
+    betrag = st.number_input("Betrag in €", min_value=0.0, step=0.50, format="%.2f")
+    zweck = st.text_input("Verwendungszweck / Artikel (z.B. 10 Gläser Waldhonig, neue Stockmeißel)")
+    kat = st.selectbox("Kategorie", ["Honigverkauf", "Völker-/Königinnenverkauf", "Imkereibedarf & Werkzeug", "Futter & Medikamente", "Beuten & Rähmchen", "Sonstiges"])
+    
+    if st.button("Buchung speichern"):
+        daten = {
+            "Typ": art,
+            "Betrag": betrag,
+            "Zweck": zweck,
+            "Kategorie": kat
+        }
+        speichere_in_google("Kassenbuch", daten)
 
 elif kategorie == "✅ Todo/Termine":
     st.header("Anstehende Aufgaben")
