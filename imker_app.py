@@ -102,23 +102,32 @@ elif kategorie == "🔍 Durchschau":
     
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     
-    # --- LOGIK FÜR ABLEGER-ERKENNUNG ---
+    # --- VERBESSERTE LOGIK FÜR ABLEGER-ERKENNUNG ---
     df_durchschau = lade_historie("Durchschau")
     ist_ableger = False
     
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
+        # Alle Einträge des gewählten Volkes filtern
         volk_historie = df_durchschau[df_durchschau["Volk"] == v_nr]
         
         if not volk_historie.empty:
+            # 1. Prüfen, ob IRGENDWANN mal "ableger" in den Bemerkungen stand
+            hat_ableger_eintrag = volk_historie["Bemerkung"].astype(str).str.lower().str.contains("ableger").any()
+            
+            # 2. Prüfen, ob im allerletzten Eintrag bereits eine Königin erfolgreich begattet ist ("Ja")
             letzter_eintrag = volk_historie.iloc[-1]
-            if "ableger" in str(letzter_eintrag.get("Bemerkung", "")).lower():
+            koenigin_schon_da = str(letzter_eintrag.get("Königin vorhanden", "")) == "Ja"
+            wieder_wirtschaftsvolk = "wirtschaftsvolk" in str(letzter_eintrag.get("Bemerkung", "")).lower()
+            
+            # Wenn es ein Ableger war, aber noch keine Königin aktiv mit "Ja" eingetragen wurde
+            if hat_ableger_eintrag and not koenigin_schon_da and not wieder_wirtschaftsvolk:
                 ist_ableger = True
 
     if ist_ableger:
-        st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert.")
-        k_vorh_default = 2  
+        st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert (wird aus deiner Historie erkannt).")
+        k_vorh_default = 2  # Automatisch auf "Unbekannt/Nachschaffung" setzen
     else:
-        k_vorh_default = 0  
+        k_vorh_default = 0  # Automatisch auf "Ja" setzen
 
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=k_vorh_default)
     
@@ -197,7 +206,6 @@ elif kategorie == "🦠 Varroa-Behandlung":
     v_liste_varroa = st.text_input("Volk / Völker (z.B. Volk 2 oder 'Alle')", value="1")
     typ_varroa = st.selectbox("Aktionstyp", ["Diagnose (Milbenfall)", "Behandlung (Ameisensäure)", "Behandlung (Oxalsäure)", "Behandlung (Milchsäure)", "Biotechnisch (Drohnenbrut)", "Sonstiges"])
     
-    # Standardwerte vorbereiten
     milben_pro_tag = 0.0
     behandlung_mittel = "-"
     menge_varroa = "-"
@@ -207,14 +215,9 @@ elif kategorie == "🦠 Varroa-Behandlung":
         tage_windel = col_tage.number_input("Tage, die die Windel lag", min_value=1, value=3, step=1)
         milben_gesamt = col_milben.number_input("Milben insgesamt gezählt", min_value=0, value=0, step=1)
         
-        # Automatische Berechnung
         if tage_windel > 0:
             milben_pro_tag = round(milben_gesamt / tage_windel, 2)
         
-        # Bewertung nach offiziellen Schadschwellen (Beispiel Frühjahr/Sommer: Mai/Juni)
-        aktuelle_vorlage_monat = datetime.now().month
-        
-        # Schadschwellen-Ampel
         st.metric(label="Berechneter Milbenfall pro Tag", value=f"{milben_pro_tag} Milben/Tag")
         
         if milben_pro_tag < 1.0:
@@ -230,7 +233,7 @@ elif kategorie == "🦠 Varroa-Behandlung":
         
     varroa_notiz = st.text_area("Bemerkungen / Wetter / Zustand des Volkes")
     
-    if st.button("Varroa-Daten speichern"):
+    if st.button("Varroa-Daten保存"):
         daten_varroa = {
             "Völker": v_liste_varroa,
             "Typ": typ_varroa,
@@ -241,7 +244,6 @@ elif kategorie == "🦠 Varroa-Behandlung":
         }
         speichere_in_google("Varroa", daten_varroa)
         
-        # Automatisch im Bestandsbuch mitschreiben, wenn es eine medikamentöse Behandlung ist
         if "Behandlung" in typ_varroa:
             daten_bestandsbuch = {
                 "Völker": v_liste_varroa,
@@ -296,7 +298,7 @@ elif kategorie == "🥣 Fütterung":
     futterart = st.selectbox("Futtertyp", ["Sirup (ApiInvert)", "Zuckerwasser 3:2", "Zuckerwasser 1:1", "Futterteig"])
     menge_l = st.number_input("Menge (Liter / kg)", min_value=0.0, step=0.5)
     
-    if st.button("Fütterung保存"):
+    if st.button("Fütterung speichern"):
         daten = {
             "Völker / Stand": v_liste,
             "Futtertyp": futterart,
