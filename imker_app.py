@@ -69,6 +69,7 @@ st.title("🐝 Bastians Imker-Zentrale")
 
 kategorie = st.sidebar.radio("MENÜ", [
     "Dashboard", 
+    "📇 Digitale Stockkarte",
     "🔍 Durchschau", 
     "👑 Königinnen-Zucht", 
     "🦠 Varroa-Behandlung",
@@ -96,38 +97,77 @@ if kategorie == "Dashboard":
     col2.metric("Todos", "Offen")
     col3.metric("Termine", "Keine")
 
+elif kategorie == "📇 Digitale Stockkarte":
+    st.header("📇 Digitale Stockkarte")
+    st.info("Wähle ein Volk aus, um die gesamte Lebenslaufakte zu sehen.")
+    
+    # Alle Daten laden
+    df_d = lade_historie("Durchschau")
+    
+    if not df_d.empty and "Volk" in df_d.columns:
+        alle_voelker = sorted(df_d["Volk"].unique())
+        v_wahl = st.selectbox("Stockkarte für Volk Nr.:", alle_voelker)
+        
+        # Tabs für die Übersicht
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Durchschauen", "🦠 Varroa", "🥣 Fütterung", "🍯 Honig"])
+        
+        with tab1:
+            st.subheader(f"Durchsichten Volk {v_wahl}")
+            st.dataframe(df_d[df_d["Volk"] == v_wahl].iloc[::-1], use_container_width=True)
+            
+        with tab2:
+            st.subheader(f"Varroa-Status Volk {v_wahl}")
+            df_v = lade_historie("Varroa")
+            if not df_v.empty:
+                # Filtert Spalte 'Völker' nach der Nummer
+                df_v_gefiltert = df_v[df_v["Völker"].astype(str).str.contains(str(v_wahl))]
+                st.dataframe(df_v_gefiltert.iloc[::-1], use_container_width=True)
+            else: st.write("Keine Daten vorhanden.")
+
+        with tab3:
+            st.subheader(f"Fütterungen Volk {v_wahl}")
+            df_f = lade_historie("Fütterung")
+            if not df_f.empty:
+                df_f_gefiltert = df_f[df_f["Völker / Stand"].astype(str).str.contains(str(v_wahl))]
+                st.dataframe(df_f_gefiltert.iloc[::-1], use_container_width=True)
+            else: st.write("Keine Daten vorhanden.")
+            
+        with tab4:
+            st.subheader(f"Honigertrag Volk {v_wahl}")
+            df_h = lade_historie("Honigernte")
+            if not df_h.empty:
+                df_h_gefiltert = df_h[df_h["Volk Nr."].astype(str).str.contains(str(v_wahl))]
+                st.dataframe(df_h_gefiltert.iloc[::-1], use_container_width=True)
+            else: st.write("Keine Daten vorhanden.")
+    else:
+        st.warning("Noch keine Völker in der Datenbank gefunden. Lege erst eine Durchschau an!")
+
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     st.subheader("📝 Neue Durchschau eintragen")
     
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     
-    # --- VERBESSERTE LOGIK FÜR ABLEGER-ERKENNUNG ---
+    # --- LOGIK FÜR ABLEGER-ERKENNUNG ---
     df_durchschau = lade_historie("Durchschau")
     ist_ableger = False
     
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
-        # Alle Einträge des gewählten Volkes filtern
         volk_historie = df_durchschau[df_durchschau["Volk"] == v_nr]
-        
         if not volk_historie.empty:
-            # 1. Prüfen, ob IRGENDWANN mal "ableger" in den Bemerkungen stand
             hat_ableger_eintrag = volk_historie["Bemerkung"].astype(str).str.lower().str.contains("ableger").any()
-            
-            # 2. Prüfen, ob im allerletzten Eintrag bereits eine Königin erfolgreich begattet ist ("Ja")
             letzter_eintrag = volk_historie.iloc[-1]
             koenigin_schon_da = str(letzter_eintrag.get("Königin vorhanden", "")) == "Ja"
             wieder_wirtschaftsvolk = "wirtschaftsvolk" in str(letzter_eintrag.get("Bemerkung", "")).lower()
             
-            # Wenn es ein Ableger war, aber noch keine Königin aktiv mit "Ja" eingetragen wurde
             if hat_ableger_eintrag and not koenigin_schon_da and not wieder_wirtschaftsvolk:
                 ist_ableger = True
 
     if ist_ableger:
-        st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert (wird aus deiner Historie erkannt).")
-        k_vorh_default = 2  # Automatisch auf "Unbekannt/Nachschaffung" setzen
+        st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert.")
+        k_vorh_default = 2  
     else:
-        k_vorh_default = 0  # Automatisch auf "Ja" setzen
+        k_vorh_default = 0  
 
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=k_vorh_default)
     
@@ -159,17 +199,6 @@ elif kategorie == "🔍 Durchschau":
             "Bemerkung": notiz
         }
         speichere_in_google("Durchschau", daten)
-
-    st.markdown("---")
-    st.subheader("🗂️ Kartenindex / Völker-Historie")
-    if not df_durchschau.empty and "Volk" in df_durchschau.columns:
-        alle_voelker = sorted(df_durchschau["Volk"].unique())
-        index_default = alle_voelker.index(v_nr) if v_nr in alle_voelker else 0
-        ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker, index=index_default)
-        df_gefiltert = df_durchschau[df_durchschau["Volk"] == ausgewaehltes_volk]
-        st.dataframe(df_gefiltert.iloc[::-1], use_container_width=True)
-    else:
-        st.info("Sobald du einen Eintrag mit Überschriften gespeichert hast, siehst du hier dein Völker-Archiv!")
 
 elif kategorie == "👑 Königinnen-Zucht":
     st.header("👑 Königinnen-Zucht & Umlarv-Planer")
@@ -233,7 +262,7 @@ elif kategorie == "🦠 Varroa-Behandlung":
         
     varroa_notiz = st.text_area("Bemerkungen / Wetter / Zustand des Volkes")
     
-    if st.button("Varroa-Daten保存"):
+    if st.button("Varroa-Daten speichern"):
         daten_varroa = {
             "Völker": v_liste_varroa,
             "Typ": typ_varroa,
@@ -259,8 +288,6 @@ elif kategorie == "🦠 Varroa-Behandlung":
     df_varroa = lade_historie("Varroa")
     if not df_varroa.empty:
         st.dataframe(df_varroa.iloc[::-1], use_container_width=True)
-    else:
-        st.info("Noch keine Varroa-Einträge vorhanden.")
 
 elif kategorie == "📋 Bestandsbuch":
     st.header("Amtlicher Arzneimittel-Nachweis")
