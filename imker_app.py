@@ -67,7 +67,7 @@ def lade_historie(blatt_name):
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
-# Jetzt mit 9 Menüpunkten inklusive Kassenbuch!
+# Menüpunkte inklusive Kassenbuch
 kategorie = st.sidebar.radio("MENÜ", [
     "Dashboard", 
     "🔍 Durchschau", 
@@ -99,19 +99,54 @@ if kategorie == "Dashboard":
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     st.subheader("📝 Neue Durchschau eintragen")
+    
+    # 1. Volk-Nummer eingeben
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
-    k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=0)
     
-    k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
-    k_farbe = hole_farb_info(k_jahr)
-    st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
+    # --- LOGIK FÜR ABLEGER-ERKENNUNG ---
+    df_durchschau = lade_historie("Durchschau")
+    ist_ableger = False
     
-    stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=0)
+    if not df_durchschau.empty and "Volk" in df_durchschau.columns:
+        # Filter nach dem aktuell ausgewählten Volk
+        volk_historie = df_durchschau[df_durchschau["Volk"] == v_nr]
+        
+        if not volk_historie.empty:
+            # Den letzten Eintrag dieses Volks holen
+            letzter_eintrag = volk_historie.iloc[-1]
+            # Prüfen, ob das Wort "ableger" in den Bemerkungen steht
+            if "ableger" in str(letzter_eintrag.get("Bemerkung", "")).lower():
+                ist_ableger = True
+
+    # Visueller Hinweis und dynamische Vorauswahl, wenn es ein Ableger ist
+    if ist_ableger:
+        st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert.")
+        k_vorh_default = 2  # Index 2 entspricht "Unbekannt/Nachschaffung"
+    else:
+        k_vorh_default = 0  # Index 0 entspricht "Ja"
+
+    # 2. Eingabefelder für das Formular
+    k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=k_vorh_default)
+    
+    # DYNAMISCHE FELDER: Königinnen-Details nur zeigen, wenn auch eine Königin da ist
+    if k_vorh == "Ja":
+        k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
+        k_farbe = hole_farb_info(k_jahr)
+        st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
+    else:
+        # Standardwerte setzen, wenn keine Königin da ist
+        k_jahr = "-"
+        k_farbe = "-"
+        if ist_ableger:
+            st.warning("📅 *Hinweis: Lass dem Ableger genug Zeit für die Nachschaffung und den Hochzeitsflug (ca. 21-24 Tage).*")
+    
+    st.markdown("---")
+    stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=1 if ist_ableger else 0)
     sanftmut = st.select_slider("Sanftmut", options=["1", "2", "3", "4", "5"], value="5")
     schwarm = st.select_slider("Schwarmstimmung", options=["1", "2", "3", "4", "5"], value="1")
     notiz = st.text_area("Bemerkung / ToDos")
     
-    if st.button("Durchschau保存"):
+    if st.button("Durchschau Speichern"):
         daten = {
             "Volk": v_nr, 
             "Königin vorhanden": k_vorh, 
@@ -126,10 +161,11 @@ elif kategorie == "🔍 Durchschau":
 
     st.markdown("---")
     st.subheader("🗂️ Kartenindex / Völker-Historie")
-    df_durchschau = lade_historie("Durchschau")
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
         alle_voelker = sorted(df_durchschau["Volk"].unique())
-        ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker)
+        # Setzt die Historie-Auswahl automatisch auf das oben eingetippte Volk, falls vorhanden
+        index_default = alle_voelker.index(v_nr) if v_nr in alle_voelker else 0
+        ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker, index=index_default)
         df_gefiltert = df_durchschau[df_durchschau["Volk"] == ausgewaehltes_volk]
         st.dataframe(df_gefiltert.iloc[::-1], use_container_width=True)
     else:
@@ -224,7 +260,6 @@ elif kategorie == "📦 Lager":
 elif kategorie == "💰 Kassenbuch":
     st.header("💰 Imker-Kassenbuch")
     
-    # Hier sind deine Finanzfelder
     art = st.radio("Buchungsart", ["🟢 Einnahme", "🔴 Ausgabe"], index=0)
     betrag = st.number_input("Betrag in €", min_value=0.0, step=0.50, format="%.2f")
     zweck = st.text_input("Verwendungszweck / Artikel (z.B. 10 Gläser Waldhonig, neue Stockmeißel)")
