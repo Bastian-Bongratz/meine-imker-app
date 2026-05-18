@@ -67,11 +67,12 @@ def lade_historie(blatt_name):
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
-# Menüpunkte inklusive Kassenbuch
+# Jetzt mit 10 Menüpunkten inklusive Varroa-Programm!
 kategorie = st.sidebar.radio("MENÜ", [
     "Dashboard", 
     "🔍 Durchschau", 
     "👑 Königinnen-Zucht", 
+    "🦠 Varroa-Behandlung",
     "📋 Bestandsbuch", 
     "🍯 Honigernte", 
     "🥣 Fütterung", 
@@ -100,7 +101,6 @@ elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
     st.subheader("📝 Neue Durchschau eintragen")
     
-    # 1. Volk-Nummer eingeben
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     
     # --- LOGIK FÜR ABLEGER-ERKENNUNG ---
@@ -108,33 +108,26 @@ elif kategorie == "🔍 Durchschau":
     ist_ableger = False
     
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
-        # Filter nach dem aktuell ausgewählten Volk
         volk_historie = df_durchschau[df_durchschau["Volk"] == v_nr]
         
         if not volk_historie.empty:
-            # Den letzten Eintrag dieses Volks holen
             letzter_eintrag = volk_historie.iloc[-1]
-            # Prüfen, ob das Wort "ableger" in den Bemerkungen steht
             if "ableger" in str(letzter_eintrag.get("Bemerkung", "")).lower():
                 ist_ableger = True
 
-    # Visueller Hinweis und dynamische Vorauswahl, wenn es ein Ableger ist
     if ist_ableger:
         st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert.")
-        k_vorh_default = 2  # Index 2 entspricht "Unbekannt/Nachschaffung"
+        k_vorh_default = 2  
     else:
-        k_vorh_default = 0  # Index 0 entspricht "Ja"
+        k_vorh_default = 0  
 
-    # 2. Eingabefelder für das Formular
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=k_vorh_default)
     
-    # DYNAMISCHE FELDER: Königinnen-Details nur zeigen, wenn auch eine Königin da ist
     if k_vorh == "Ja":
         k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
         k_farbe = hole_farb_info(k_jahr)
         st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
     else:
-        # Standardwerte setzen, wenn keine Königin da ist
         k_jahr = "-"
         k_farbe = "-"
         if ist_ableger:
@@ -163,7 +156,6 @@ elif kategorie == "🔍 Durchschau":
     st.subheader("🗂️ Kartenindex / Völker-Historie")
     if not df_durchschau.empty and "Volk" in df_durchschau.columns:
         alle_voelker = sorted(df_durchschau["Volk"].unique())
-        # Setzt die Historie-Auswahl automatisch auf das oben eingetippte Volk, falls vorhanden
         index_default = alle_voelker.index(v_nr) if v_nr in alle_voelker else 0
         ausgewaehltes_volk = st.selectbox("Historie anzeigen für Volk:", alle_voelker, index=index_default)
         df_gefiltert = df_durchschau[df_durchschau["Volk"] == ausgewaehltes_volk]
@@ -172,14 +164,14 @@ elif kategorie == "🔍 Durchschau":
         st.info("Sobald du einen Eintrag mit Überschriften gespeichert hast, siehst du hier dein Völker-Archiv!")
 
 elif kategorie == "👑 Königinnen-Zucht":
-    st.header("👑 Königinnen-Zucht & Umlav-Planer")
+    st.header("👑 Königinnen-Zucht & Umlarv-Planer")
     zucht_name = st.text_input("Zuchtserie Bezeichnung", value="Serie 1 - 2026")
-    umlauftag = st.date_input("Umlavdatum / Start", datetime.now())
-    anzahl_larven = st.number_input("Anzahl umgelavte Larven", min_value=1, value=10, step=1)
+    umlarvtag = st.date_input("Umlarvdatum / Start", datetime.now())
+    anzahl_larven = st.number_input("Anzahl umgelarvte Larven", min_value=1, value=10, step=1)
     
-    deckelung = umlauftag + timedelta(days=5)
-    verschulen = umlauftag + timedelta(days=11)
-    schlupf = umlauftag + timedelta(days=12)
+    deckelung = umlarvtag + timedelta(days=5)
+    verschulen = umlarvtag + timedelta(days=11)
+    schlupf = umlarvtag + timedelta(days=12)
     
     st.subheader("📅 Wichtige Termine für diese Serie:")
     st.warning(f"🔒 **Caging / Verschulen (Tag 11):** {verschulen.strftime('%d.%m.%Y')}")
@@ -191,13 +183,50 @@ elif kategorie == "👑 Königinnen-Zucht":
     if st.button("Zuchtserie in Google Sheets sichern"):
         daten = {
             "Zucht-Serie": zucht_name,
-            "Umlavdatum": umlauftag.strftime("%d.%m.%Y"),
+            "Umlarvdatum": umlarvtag.strftime("%d.%m.%Y"),
             "Larven Anzahl": anzahl_larven,
             "Verschul-Datum": verschulen.strftime("%d.%m.%Y"),
             "Schlupf-Datum": schlupf.strftime("%d.%m.%Y"),
             "Herkunft/Notiz": zucht_notiz
         }
         speichere_in_google("Zucht", daten)
+
+elif kategorie == "🦠 Varroa-Behandlung":
+    st.header("🦠 Varroa-Kontrolle & Behandlung")
+    st.subheader("📝 Neuen Varroa-Status erfassen")
+    
+    v_liste_varroa = st.text_input("Volk / Völker (z.B. Volk 2 oder 'Alle')", value="1")
+    typ_varroa = st.selectbox("Aktionstyp", ["Diagnose (Milbenfall)", "Behandlung (Ameisensäure)", "Behandlung (Oxalsäure)", "Behandlung (Milchsäure)", "Biotechnisch (Drohnenbrut)", "Sonstiges"])
+    
+    if typ_varroa == "Diagnose (Milbenfall)":
+        milben_pro_tag = st.number_input("Natürlicher Milbenfall (Milben pro Tag)", min_value=0.0, step=0.5, value=0.0)
+        behandlung_mittel = "-"
+        menge_varroa = "-"
+    else:
+        milben_pro_tag = 0.0
+        behandlung_mittel = st.text_input("Eingesetztes Mittel / Verfahren (z.B. MAQS, Liebig-Dispens.)")
+        menge_varroa = st.text_input("Dosierung / Menge (z.B. 50ml, 1 Streifen)")
+        
+    varroa_notiz = st.text_area("Bemerkungen / Wetter / Zustand des Volkes")
+    
+    if st.button("Varroa-Daten speichern"):
+        daten = {
+            "Völker": v_liste_varroa,
+            "Typ": typ_varroa,
+            "Milben/Tag": milben_pro_tag,
+            "Mittel": behandlung_mittel,
+            "Menge": menge_varroa,
+            "Bemerkung": varroa_notiz
+        }
+        speichere_in_google("Varroa", daten)
+        
+    st.markdown("---")
+    st.subheader("🗂️ Varroa-Historie")
+    df_varroa = lade_historie("Varroa")
+    if not df_varroa.empty:
+        st.dataframe(df_varroa.iloc[::-1], use_container_width=True)
+    else:
+        st.info("Noch keine Varroa-Einträge vorhanden.")
 
 elif kategorie == "📋 Bestandsbuch":
     st.header("Amtlicher Arzneimittel-Nachweis")
