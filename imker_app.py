@@ -67,7 +67,6 @@ def lade_historie(blatt_name):
 st.set_page_config(page_title="Imker App", page_icon="🐝")
 st.title("🐝 Bastians Imker-Zentrale")
 
-# Jetzt mit 10 Menüpunkten inklusive Varroa-Programm!
 kategorie = st.sidebar.radio("MENÜ", [
     "Dashboard", 
     "🔍 Durchschau", 
@@ -198,19 +197,41 @@ elif kategorie == "🦠 Varroa-Behandlung":
     v_liste_varroa = st.text_input("Volk / Völker (z.B. Volk 2 oder 'Alle')", value="1")
     typ_varroa = st.selectbox("Aktionstyp", ["Diagnose (Milbenfall)", "Behandlung (Ameisensäure)", "Behandlung (Oxalsäure)", "Behandlung (Milchsäure)", "Biotechnisch (Drohnenbrut)", "Sonstiges"])
     
+    # Standardwerte vorbereiten
+    milben_pro_tag = 0.0
+    behandlung_mittel = "-"
+    menge_varroa = "-"
+    
     if typ_varroa == "Diagnose (Milbenfall)":
-        milben_pro_tag = st.number_input("Natürlicher Milbenfall (Milben pro Tag)", min_value=0.0, step=0.5, value=0.0)
-        behandlung_mittel = "-"
-        menge_varroa = "-"
+        col_tage, col_milben = st.columns(2)
+        tage_windel = col_tage.number_input("Tage, die die Windel lag", min_value=1, value=3, step=1)
+        milben_gesamt = col_milben.number_input("Milben insgesamt gezählt", min_value=0, value=0, step=1)
+        
+        # Automatische Berechnung
+        if tage_windel > 0:
+            milben_pro_tag = round(milben_gesamt / tage_windel, 2)
+        
+        # Bewertung nach offiziellen Schadschwellen (Beispiel Frühjahr/Sommer: Mai/Juni)
+        aktuelle_vorlage_monat = datetime.now().month
+        
+        # Schadschwellen-Ampel
+        st.metric(label="Berechneter Milbenfall pro Tag", value=f"{milben_pro_tag} Milben/Tag")
+        
+        if milben_pro_tag < 1.0:
+            st.success("🟢 **In Ordnung:** Der Milbenfall ist aktuell unkritisch.")
+        elif 1.0 <= milben_pro_tag <= 3.0:
+            st.warning("🟡 **Beobachten:** Erhöhter Milbenfall. Windel bald wieder kontrollieren!")
+        else:
+            st.error("🔴 **Kritisch:** Schadschwelle überschritten! Behandlung einleiten oder Drohnenbrutschnitt prüfen.")
+            
     else:
-        milben_pro_tag = 0.0
         behandlung_mittel = st.text_input("Eingesetztes Mittel / Verfahren (z.B. MAQS, Liebig-Dispens.)")
         menge_varroa = st.text_input("Dosierung / Menge (z.B. 50ml, 1 Streifen)")
         
     varroa_notiz = st.text_area("Bemerkungen / Wetter / Zustand des Volkes")
     
     if st.button("Varroa-Daten speichern"):
-        daten = {
+        daten_varroa = {
             "Völker": v_liste_varroa,
             "Typ": typ_varroa,
             "Milben/Tag": milben_pro_tag,
@@ -218,7 +239,18 @@ elif kategorie == "🦠 Varroa-Behandlung":
             "Menge": menge_varroa,
             "Bemerkung": varroa_notiz
         }
-        speichere_in_google("Varroa", daten)
+        speichere_in_google("Varroa", daten_varroa)
+        
+        # Automatisch im Bestandsbuch mitschreiben, wenn es eine medikamentöse Behandlung ist
+        if "Behandlung" in typ_varroa:
+            daten_bestandsbuch = {
+                "Völker": v_liste_varroa,
+                "Arzneimittel & Charge": f"{typ_varroa} ({behandlung_mittel})",
+                "Dosierung": menge_varroa,
+                "Wartezeit (Tage)": 0
+            }
+            speichere_in_google("Bestandsbuch", daten_bestandsbuch)
+            st.info("📢 Diese Behandlung wurde auch automatisch in dein amtliches Bestandsbuch eingetragen!")
         
     st.markdown("---")
     st.subheader("🗂️ Varroa-Historie")
@@ -264,7 +296,7 @@ elif kategorie == "🥣 Fütterung":
     futterart = st.selectbox("Futtertyp", ["Sirup (ApiInvert)", "Zuckerwasser 3:2", "Zuckerwasser 1:1", "Futterteig"])
     menge_l = st.number_input("Menge (Liter / kg)", min_value=0.0, step=0.5)
     
-    if st.button("Fütterung speichern"):
+    if st.button("Fütterung保存"):
         daten = {
             "Völker / Stand": v_liste,
             "Futtertyp": futterart,
