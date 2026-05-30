@@ -174,7 +174,7 @@ elif kategorie == "🔍 Durchschau":
     if k_vorh == "Ja":
         k_jahr = st.selectbox("Geburtsjahr der Königin", [2026, 2025, 2024, 2023, 2022], index=0)
         k_farbe = hole_farb_info(k_jahr)
-        st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} ist: **{k_farbe}**")
+        st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} is: **{k_farbe}**")
     else:
         k_jahr = "-"
         k_farbe = "-"
@@ -182,7 +182,7 @@ elif kategorie == "🔍 Durchschau":
             st.warning("📅 *Hinweis: Lass dem Ableger genug Zeit für die Nachschaffung und den Hochzeitsflug (ca. 21-24 Tage).*")
     
     st.markdown("---")
-    stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=1 if ist_ableger else 0)
+    st.stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=1 if ist_ableger else 0)
     sanftmut = st.select_slider("Sanftmut", options=["1", "2", "3", "4", "5"], value="5")
     schwarm = st.select_slider("Schwarmstimmung", options=["1", "2", "3", "4", "5"], value="1")
     notiz = st.text_area("Bemerkung / ToDos")
@@ -320,7 +320,40 @@ elif kategorie == "🍯 Honigernte":
         speichere_in_google("Honigernte", daten)
 
 elif kategorie == "🥣 Fütterung":
-    st.header("Fütterung eintragen")
+    st.header("🥣 Fütterung & Futterrechner")
+    
+    # --- NEUER BIENENFUTTER RECHNER ---
+    st.subheader("🧮 Futtermenge-Rechner")
+    zuckermenge_input = st.number_input("Zuckermenge (kg)", min_value=0.0, value=1.0, step=1.0)
+    
+    if zuckermenge_input > 0:
+        # Berechnungen 3:2
+        wasser_3_2 = round(zuckermenge_input / 1.5, 1)
+        gesamt_3_2 = round((zuckermenge_input * 0.6) + wasser_3_2, 1)
+        theo_3_2 = round(zuckermenge_input * 1.2, 1)
+        tat_3_2 = round(zuckermenge_input * 1.0, 1)
+        
+        # Berechnungen 1:1
+        wasser_1_1 = round(zuckermenge_input * 1.0, 1)
+        gesamt_1_1 = round((zuckermenge_input * 0.6) + wasser_1_1, 1)
+        
+        # UI-Darstellung im Stil des Screenshots (mit Kacheln/Metriken)
+        st.markdown("### **BIENENFUTTER 3:2**")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Wassermenge", f"{wasser_3_2} Liter")
+        col2.metric("Gesamtmenge", f"{gesamt_3_2} Liter")
+        col3.metric("theo. Eingelagert", f"{theo_3_2} kg")
+        col4.metric("tat. eingelagert", f"{tat_3_2} kg")
+        
+        st.markdown("### **BIENENFUTTER 1:1**")
+        col5, col6 = st.columns(2)
+        col5.metric("Wassermenge", f"{wasser_1_1} Liter")
+        col6.metric("Gesamtmenge", f"{gesamt_1_1} Liter")
+        
+    st.markdown("---")
+    
+    # --- BESTEHENDES FORMULAR ---
+    st.subheader("📝 Fütterung eintragen")
     v_liste = st.text_input("Völker / Stand")
     futterart = st.selectbox("Futtertyp", ["Sirup (ApiInvert)", "Zuckerwasser 3:2", "Zuckerwasser 1:1", "Futterteig"])
     menge_l = st.number_input("Menge (Liter / kg)", min_value=0.0, step=0.5)
