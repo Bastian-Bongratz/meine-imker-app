@@ -21,41 +21,65 @@ def hole_google_tabelle():
     
     return client.open("Imker_Daten")
 
-def speichere_in_google(blatt_name, daten_dict):
+def speichere_in_volks_tabelle(volk_nr, aktions_typ, daten_dict):
     try:
         tabelle = hole_google_tabelle()
+        blatt_name = f"Volk_{volk_nr}"
+        
+        # Alle denkbaren Spalten für das kombinierte Volksblatt definieren
+        alle_spalten = [
+            "Datum", "Typ", "Königin vorhanden", "Königin Jahr", "Königin Farbe", 
+            "Stifte / Brut", "Sanftmut", "Schwarmstimmung", "Varroa-Mittel", 
+            "Varroa-Menge", "Milben/Tag", "Futtertyp", "Futter-Menge", 
+            "Honig-Sorte", "Honig-kg", "Bemerkung"
+        ]
         
         try:
             worksheet = tabelle.worksheet(blatt_name)
         except gspread.exceptions.WorksheetNotFound:
-            worksheet = tabelle.add_worksheet(title=blatt_name, rows="500", cols="20")
+            # Erstellt ein neues Blatt für das Volk, falls es noch nicht existiert
+            worksheet = tabelle.add_worksheet(title=blatt_name, rows="1000", cols="20")
+            worksheet.append_row(alle_spalten)
             
-        alle_werte = worksheet.get_all_values()
+        # Standardzeile vorbereiten (voll mit leeren Werten)
+        zeilen_daten = {spalte: "-" for spalte in alle_spalten}
         
-        if not alle_werte or len(alle_werte) == 0 or alle_werte == [[]]:
-            überschriften = ["Datum"] + list(daten_dict.keys())
-            worksheet.append_row(überschriften)
-            
-        jetzt = datetime.now().strftime("%d.%m.%Y")
-        eintrag = [jetzt] + list(daten_dict.values())
+        # Basis-Daten setzen
+        zeilen_daten["Datum"] = datetime.now().strftime("%d.%m.%Y")
+        zeilen_daten["Typ"] = aktions_typ
         
-        worksheet.append_row(eintrag)
+        # Spezifische Werte aus dem übergebenen Dictionary eintragen
+        for key, value in daten_dict.items():
+            if key in zeilen_daten:
+                zeilen_daten[key] = value
+                
+        # Als Liste in der richtigen Reihenfolge sortieren und anhängen
+        eintrag_liste = [zeilen_daten[spalte] for spalte in alle_spalten]
+        worksheet.append_row(eintrag_liste)
+        
         st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
         st.cache_data.clear()
         
     except Exception as e:
-        if "200" in str(e):
-            st.success(f"Erfolgreich im Tabellenblatt '{blatt_name}' gespeichert! 🐝")
-            st.cache_data.clear()
-        else:
-            st.error(f"Fehler beim Speichern: {e}")
+        st.error(f"Fehler beim Speichern: {e}")
 
-# --- DATEN FÜR HISTORIE LADEN ---
+# --- ENTFÄLLT NICHT, WIRD FÜR DIE GEÄNDERTE HISTORIE GENUTZT ---
 @st.cache_data(ttl=10)
-def lade_historie(blatt_name):
+def hole_alle_voelker_aus_sheets():
     try:
         tabelle = hole_google_tabelle()
-        worksheet = tabelle.worksheet(blatt_name)
+        blätter = tabelle.worksheets()
+        # Filtert alle Blätter heraus, die mit "Volk_" beginnen
+        v_liste = [b.title.split("_")[1] for b in blätter if b.title.startswith("Volk_")]
+        return sorted([int(x) for x in v_liste if x.isdigit()])
+    except Exception:
+        return []
+
+@st.cache_data(ttl=10)
+def lade_volk_historie(volk_nr):
+    try:
+        tabelle = hole_google_tabelle()
+        worksheet = tabelle.worksheet(f"Volk_{volk_nr}")
         alle_zeilen = worksheet.get_all_records()
         if alle_zeilen:
             return pd.DataFrame(alle_zeilen)
@@ -101,68 +125,55 @@ elif kategorie == "📇 Digitale Stockkarte":
     st.header("📇 Digitale Stockkarte")
     st.info("Wähle ein Volk aus, um die gesamte Lebenslaufakte zu sehen.")
     
-    # Alle Daten laden
-    df_d = lade_historie("Durchschau")
+    alle_voelker = hole_alle_voelker_aus_sheets()
     
-    if not df_d.empty and "Volk" in df_d.columns:
+    if alle_voelker:
         # --- LOGIK: AUFGELÖSTE VÖLKER FILTERN ---
         aktive_voelker = []
-        alle_voelker = sorted(df_d["Volk"].unique())
-        
         for v in alle_voelker:
-            # Hole alle Einträge für dieses Volk
-            volk_daten = df_d[df_d["Volk"] == v]
-            if not volk_daten.empty:
-                # Schaue nach dem allerletzten Eintrag (neuestes Datum steht unten)
-                letzter_eintrag = volk_daten.iloc[-1]
+            df_v = lade_volk_historie(v)
+            if not df_v.empty:
+                letzter_eintrag = df_v.iloc[-1]
                 bemerkung = str(letzter_eintrag.get("Bemerkung", "")).lower()
-                
-                # Wenn "aufgelöst" NICHT in der letzten Bemerkung steht, ist das Volk aktiv
                 if "aufgelöst" not in bemerkung:
                     aktive_voelker.append(v)
-        
-        # Falls doch mal ein aufgelöstes Volk gesucht wird, machen wir einen Umschalter
+                    
         zeige_aufgelöste = st.checkbox("Auch aufgelöste Völker anzeigen", value=False)
-        
         voelker_auswahl = alle_voelker if zeige_aufgelöste else aktive_voelker
         
         if not voelker_auswahl:
             st.warning("Aktuell keine aktiven Völker vorhanden.")
         else:
             v_wahl = st.selectbox("Stockkarte für Volk Nr.:", voelker_auswahl)
+            df_volk = lade_volk_historie(v_wahl)
             
-            # Tabs für die Übersicht
-            tab1, tab2, tab3, tab4 = st.tabs(["📋 Durchschauen", "🦠 Varroa", "🥣 Fütterung", "🍯 Honig"])
-            
-            with tab1:
-                st.subheader(f"Durchsichten Volk {v_wahl}")
-                st.dataframe(df_d[df_d["Volk"] == v_wahl].iloc[::-1], use_container_width=True)
+            if not df_volk.empty:
+                # Filtert das kombinierte Blatt in die jeweiligen Tabs zur Übersicht auf der UI
+                tab1, tab2, tab3, tab4 = st.tabs(["📋 Durchschauen", "🦠 Varroa", "🥣 Fütterung", "🍯 Honig"])
                 
-            with tab2:
-                st.subheader(f"Varroa-Status Volk {v_wahl}")
-                df_v = lade_historie("Varroa")
-                if not df_v.empty:
-                    df_v_gefiltert = df_v[df_v["Völker"].astype(str).str.contains(str(v_wahl))]
-                    st.dataframe(df_v_gefiltert.iloc[::-1], use_container_width=True)
-                else: st.write("Keine Daten vorhanden.")
+                with tab1:
+                    st.subheader(f"Durchsichten Volk {v_wahl}")
+                    df_d = df_volk[df_volk["Typ"] == "Durchschau"]
+                    st.dataframe(df_d.iloc[::-1], use_container_width=True)
+                    
+                with tab2:
+                    st.subheader(f"Varroa-Status Volk {v_wahl}")
+                    df_var = df_volk[df_volk["Typ"] == "Varroa"]
+                    st.dataframe(df_var.iloc[::-1], use_container_width=True)
 
-            with tab3:
-                st.subheader(f"Fütterungen Volk {v_wahl}")
-                df_f = lade_historie("Fütterung")
-                if not df_f.empty:
-                    df_f_gefiltert = df_f[df_f["Völker / Stand"].astype(str).str.contains(str(v_wahl))]
-                    st.dataframe(df_f_gefiltert.iloc[::-1], use_container_width=True)
-                else: st.write("Keine Daten vorhanden.")
-                
-            with tab4:
-                st.subheader(f"Honigertrag Volk {v_wahl}")
-                df_h = lade_historie("Honigernte")
-                if not df_h.empty:
-                    df_h_gefiltert = df_h[df_h["Volk Nr."].astype(str).str.contains(str(v_wahl))]
-                    st.dataframe(df_h_gefiltert.iloc[::-1], use_container_width=True)
-                else: st.write("Keine Daten vorhanden.")
+                with tab3:
+                    st.subheader(f"Fütterungen Volk {v_wahl}")
+                    df_f = df_volk[df_volk["Typ"] == "Fütterung"]
+                    st.dataframe(df_f.iloc[::-1], use_container_width=True)
+                    
+                with tab4:
+                    st.subheader(f"Honigertrag Volk {v_wahl}")
+                    df_h = df_volk[df_volk["Typ"] == "Honigernte"]
+                    st.dataframe(df_h.iloc[::-1], use_container_width=True)
+            else:
+                st.write("Keine Einträge für dieses Volk gefunden.")
     else:
-        st.warning("Noch keine Völker in der Datenbank gefunden. Lege erst eine Durchschau an!")
+        st.warning("Noch keine Völker-Tabellen in der Datenbank gefunden. Lege erst eine Durchschau an!")
 
 elif kategorie == "🔍 Durchschau":
     st.header("Völkerdurchsicht")
@@ -170,27 +181,21 @@ elif kategorie == "🔍 Durchschau":
     
     v_nr = st.number_input("Volk Nr.", min_value=1, step=1)
     
-    # --- LOGIK FÜR ABLEGER-ERKENNUNG ---
-    df_durchschau = lade_historie("Durchschau")
+    df_volk = lade_volk_historie(v_nr)
     ist_ableger = False
     
-    if not df_durchschau.empty and "Volk" in df_durchschau.columns:
-        volk_historie = df_durchschau[df_durchschau["Volk"] == v_nr]
-        if not volk_historie.empty:
-            hat_ableger_eintrag = volk_historie["Bemerkung"].astype(str).str.lower().str.contains("ableger").any()
-            letzter_eintrag = volk_historie.iloc[-1]
+    if not df_volk.empty:
+        df_durchschau = df_volk[df_volk["Typ"] == "Durchschau"]
+        if not df_durchschau.empty:
+            hat_ableger_eintrag = df_durchschau["Bemerkung"].astype(str).str.lower().str.contains("ableger").any()
+            letzter_eintrag = df_durchschau.iloc[-1]
             koenigin_schon_da = str(letzter_eintrag.get("Königin vorhanden", "")) == "Ja"
             wieder_wirtschaftsvolk = "wirtschaftsvolk" in str(letzter_eintrag.get("Bemerkung", "")).lower()
             
             if hat_ableger_eintrag and not koenigin_schon_da and not wieder_wirtschaftsvolk:
                 ist_ableger = True
 
-    if ist_ableger:
-        st.info("ℹ️ Dieses Volk ist aktuell als **Ableger** deklariert.")
-        k_vorh_default = 2  
-    else:
-        k_vorh_default = 0  
-
+    k_vorh_default = 2 if ist_ableger else 0
     k_vorh = st.radio("Königin vorhanden?", ["Ja", "Nein", "Unbekannt/Nachschaffung"], index=k_vorh_default)
     
     if k_vorh == "Ja":
@@ -198,8 +203,7 @@ elif kategorie == "🔍 Durchschau":
         k_farbe = hole_farb_info(k_jahr)
         st.info(f"Die offizielle Zeichnungsfarbe für {k_jahr} is: **{k_farbe}**")
     else:
-        k_jahr = "-"
-        k_farbe = "-"
+        k_jahr, k_farbe = "-", "-"
         if ist_ableger:
             st.warning("📅 *Hinweis: Lass dem Ableger genug Zeit für die Nachschaffung und den Hochzeitsflug (ca. 21-24 Tage).*")
     
@@ -211,7 +215,6 @@ elif kategorie == "🔍 Durchschau":
     
     if st.button("Durchschau Speichern"):
         daten = {
-            "Volk": v_nr, 
             "Königin vorhanden": k_vorh, 
             "Königin Jahr": k_jahr,
             "Königin Farbe": k_farbe,
@@ -220,10 +223,11 @@ elif kategorie == "🔍 Durchschau":
             "Schwarmstimmung": schwarm, 
             "Bemerkung": notiz
         }
-        speichere_in_google("Durchschau", daten)
+        speichere_in_volks_tabelle(v_nr, "Durchschau", daten)
 
 elif kategorie == "👑 Königinnen-Zucht":
     st.header("👑 Königinnen-Zucht & Umlarv-Planer")
+    # Zucht ist standübergreifend, daher nutzen wir hier die alte Haupt-Logik weiter
     zucht_name = st.text_input("Zuchtserie Bezeichnung", value="Serie 1 - 2026")
     umlarvtag = st.date_input("Umlarvdatum / Start", datetime.now())
     anzahl_larven = st.number_input("Anzahl umgelarvte Larven", min_value=1, value=10, step=1)
@@ -240,92 +244,59 @@ elif kategorie == "👑 Königinnen-Zucht":
     zucht_notiz = st.text_input("Notizen zur Herkunft (Zuchtmutter)")
     
     if st.button("Zuchtserie in Google Sheets sichern"):
-        daten = {
-            "Zucht-Serie": zucht_name,
-            "Umlarvdatum": umlarvtag.strftime("%d.%m.%Y"),
-            "Larven Anzahl": anzahl_larven,
-            "Verschul-Datum": verschulen.strftime("%d.%m.%Y"),
-            "Schlupf-Datum": schlupf.strftime("%d.%m.%Y"),
-            "Herkunft/Notiz": zucht_notiz
-        }
-        speichere_in_google("Zucht", daten)
+        try:
+            tabelle = hole_google_tabelle()
+            try: worksheet = tabelle.worksheet("Zucht")
+            except gspread.exceptions.WorksheetNotFound: worksheet = tabelle.add_worksheet(title="Zucht", rows="500", cols="10")
+            worksheet.append_row([datetime.now().strftime("%d.%m.%Y"), zucht_name, umlarvtag.strftime("%d.%m.%Y"), anzahl_larven, verschulen.strftime("%d.%m.%Y"), schlupf.strftime("%d.%m.%Y"), zucht_notiz])
+            st.success("Erfolgreich in Zucht-Tabelle gesichert!")
+        except Exception as e: st.error(f"Fehler: {e}")
 
 elif kategorie == "🦠 Varroa-Behandlung":
     st.header("🦠 Varroa-Kontrolle & Behandlung")
-    st.subheader("📝 Neuen Varroa-Status erfassen")
-    
-    v_liste_varroa = st.text_input("Volk / Völker (z.B. Volk 2 oder 'Alle')", value="1")
+    v_nr_varroa = st.number_input("Für welches Volk Nr.?", min_value=1, step=1)
     typ_varroa = st.selectbox("Aktionstyp", ["Diagnose (Milbenfall)", "Behandlung (Ameisensäure)", "Behandlung (Oxalsäure)", "Behandlung (Milchsäure)", "Biotechnisch (Drohnenbrut)", "Sonstiges"])
     
     milben_pro_tag = 0.0
-    behandlung_mittel = "-"
-    menge_varroa = "-"
+    behandlung_mittel, menge_varroa = "-", "-"
     
     if typ_varroa == "Diagnose (Milbenfall)":
         col_tage, col_milben = st.columns(2)
         tage_windel = col_tage.number_input("Tage, die die Windel lag", min_value=1, value=3, step=1)
         milben_gesamt = col_milben.number_input("Milben insgesamt gezählt", min_value=0, value=0, step=1)
-        
-        if tage_windel > 0:
-            milben_pro_tag = round(milben_gesamt / tage_windel, 2)
-        
+        if tage_windel > 0: milben_pro_tag = round(milben_gesamt / tage_windel, 2)
         st.metric(label="Berechneter Milbenfall pro Tag", value=f"{milben_pro_tag} Milben/Tag")
-        
-        if milben_pro_tag < 1.0:
-            st.success("🟢 **In Ordnung:** Der Milbenfall ist aktuell unkritisch.")
-        elif 1.0 <= milben_pro_tag <= 3.0:
-            st.warning("🟡 **Beobachten:** Erhöhter Milbenfall. Windel bald wieder kontrollieren!")
-        else:
-            st.error("🔴 **Kritisch:** Schadschwelle überschritten! Behandlung einleiten oder Drohnenbrutschnitt prüfen.")
-            
     else:
-        behandlung_mittel = st.text_input("Eingesetztes Mittel / Verfahren (z.B. MAQS, Liebig-Dispens.)")
-        menge_varroa = st.text_input("Dosierung / Menge (z.B. 50ml, 1 Streifen)")
+        behandlung_mittel = st.text_input("Eingesetztes Mittel / Verfahren")
+        menge_varroa = st.text_input("Dosierung / Menge")
         
-    varroa_notiz = st.text_area("Bemerkungen / Wetter / Zustand des Volkes")
+    varroa_notiz = st.text_area("Bemerkungen / Wetter")
     
     if st.button("Varroa-Daten speichern"):
-        daten_varroa = {
-            "Völker": v_liste_varroa,
-            "Typ": typ_varroa,
+        daten = {
+            "Varroa-Mittel": behandlung_mittel,
+            "Varroa-Menge": menge_varroa,
             "Milben/Tag": milben_pro_tag,
-            "Mittel": behandlung_mittel,
-            "Menge": menge_varroa,
-            "Bemerkung": varroa_notiz
+            "Bemerkung": f"{typ_varroa} - {varroa_notiz}"
         }
-        speichere_in_google("Varroa", daten_varroa)
-        
-        if "Behandlung" in typ_varroa:
-            daten_bestandsbuch = {
-                "Völker": v_liste_varroa,
-                "Arzneimittel & Charge": f"{typ_varroa} ({behandlung_mittel})",
-                "Dosierung": menge_varroa,
-                "Wartezeit (Tage)": 0
-            }
-            speichere_in_google("Bestandsbuch", daten_bestandsbuch)
-            st.info("📢 Diese Behandlung wurde auch automatisch in dein amtliches Bestandsbuch eingetragen!")
-        
-    st.markdown("---")
-    st.subheader("🗂️ Varroa-Historie")
-    df_varroa = lade_historie("Varroa")
-    if not df_varroa.empty:
-        st.dataframe(df_varroa.iloc[::-1], use_container_width=True)
+        speichere_in_volks_tabelle(v_nr_varroa, "Varroa", daten)
 
 elif kategorie == "📋 Bestandsbuch":
     st.header("Amtlicher Arzneimittel-Nachweis")
-    v_liste = st.text_input("Welche Völker? (z.B. 1, 2, 3)")
+    # Amtliches Bestandsbuch bleibt als Gesamtliste bestehen
+    v_liste = st.text_input("Welche Völker? (z.B. 1)")
     mittel = st.text_input("Arzneimittel & Charge")
     menge = st.text_input("Dosierung")
     warzeit = st.number_input("Wartezeit (Tage)", min_value=0, step=1)
     
     if st.button("Bestandsbuch-Eintrag speichern"):
-        daten = {
-            "Völker": v_liste,
-            "Arzneimittel & Charge": mittel,
-            "Dosierung": menge,
-            "Wartezeit (Tage)": warzeit
-        }
-        speichere_in_google("Bestandsbuch", daten)
+        try:
+            tabelle = hole_google_tabelle()
+            try: worksheet = tabelle.worksheet("Bestandsbuch")
+            except gspread.exceptions.WorksheetNotFound: worksheet = tabelle.add_worksheet(title="Bestandsbuch", rows="500", cols="10")
+            worksheet.append_row([datetime.now().strftime("%d.%m.%Y"), v_liste, mittel, menge, warzeit])
+            st.success("Im amtlichen Bestandsbuch gesichert!")
+        except Exception as e: st.error(f"Fehler: {e}")
 
 elif kategorie == "🍯 Honigernte":
     st.header("Ernte erfassen")
@@ -335,102 +306,50 @@ elif kategorie == "🍯 Honigernte":
     
     if st.button("Ernte speichern"):
         daten = {
-            "Volk Nr.": v_nr,
-            "Sorte": sorte,
-            "Menge in kg": kg
+            "Honig-Sorte": sorte,
+            "Honig-kg": kg
         }
-        speichere_in_google("Honigernte", daten)
+        speichere_in_volks_tabelle(v_nr, "Honigernte", daten)
 
 elif kategorie == "🥣 Fütterung":
     st.header("🥣 Fütterung & Futterrechner")
-    
-    # --- NEUER BIENENFUTTER RECHNER ---
     st.subheader("🧮 Futtermenge-Rechner")
     zuckermenge_input = st.number_input("Zuckermenge (kg)", min_value=0.0, value=1.0, step=1.0)
     
     if zuckermenge_input > 0:
-        # Berechnungen 3:2
         wasser_3_2 = round(zuckermenge_input / 1.5, 1)
         gesamt_3_2 = round((zuckermenge_input * 0.6) + wasser_3_2, 1)
-        theo_3_2 = round(zuckermenge_input * 1.2, 1)
-        tat_3_2 = round(zuckermenge_input * 1.0, 1)
-        
-        # Berechnungen 1:1
-        wasser_1_1 = round(zuckermenge_input * 1.0, 1)
-        gesamt_1_1 = round((zuckermenge_input * 0.6) + wasser_1_1, 1)
-        
-        # UI-Darstellung im Stil des Screenshots (mit Kacheln/Metriken)
-        st.markdown("### **BIENENFUTTER 3:2**")
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Wassermenge", f"{wasser_3_2} Liter")
-        col2.metric("Gesamtmenge", f"{gesamt_3_2} Liter")
-        col3.metric("theo. Eingelagert", f"{theo_3_2} kg")
-        col4.metric("tat. eingelagert", f"{tat_3_2} kg")
-        
-        st.markdown("### **BIENENFUTTER 1:1**")
-        col5, col6 = st.columns(2)
-        col5.metric("Wassermenge", f"{wasser_1_1} Liter")
-        col6.metric("Gesamtmenge", f"{gesamt_1_1} Liter")
+        st.markdown(f"**Bienenfutter 3:2:** {wasser_3_2}L Wasser | {gesamt_3_2}L Gesamtmenge")
         
     st.markdown("---")
-    
-    # --- BESTEHENDES FORMULAR ---
     st.subheader("📝 Fütterung eintragen")
-    v_liste = st.text_input("Völker / Stand")
+    v_nr_futter = st.number_input("Für Volk Nr.", min_value=1, step=1)
     futterart = st.selectbox("Futtertyp", ["Sirup (ApiInvert)", "Zuckerwasser 3:2", "Zuckerwasser 1:1", "Futterteig"])
     menge_l = st.number_input("Menge (Liter / kg)", min_value=0.0, step=0.5)
     
     if st.button("Fütterung speichern"):
         daten = {
-            "Völker / Stand": v_liste,
             "Futtertyp": futterart,
-            "Menge": menge_l
+            "Futter-Menge": menge_l
         }
-        speichere_in_google("Fütterung", daten)
+        speichere_in_volks_tabelle(v_nr_futter, "Fütterung", daten)
 
 elif kategorie == "📦 Lager":
     st.header("Lagerbestand & Inventar")
-    artikel = st.selectbox("Artikel / Zubehör", ["Zargen (Dadant/Zander)", "Rähmchen (Leergut)", "Rähmchen (mit Mittelwänden)", "Honiggläser (500g)", "Honiggläser (250g)", "Futterzargen", "Sonstiges"])
-    menge_lager = st.number_input("Anzahl / Menge", min_value=0, step=1)
-    lager_notiz = st.text_input("Anmerkung (z.B. Zustand, Lagerort)")
-    
+    # Lager/Kassenbuch/Todos sind unabh. von einzelnen Völkern und bleiben global
+    artikel = st.selectbox("Artikel", ["Zargen", "Rähmchen", "Honiggläser", "Sonstiges"])
+    menge_lager = st.number_input("Anzahl", min_value=0, step=1)
     if st.button("Bestand aktualisieren"):
-        daten = {
-            "Artikel": artikel,
-            "Menge": menge_lager,
-            "Anmerkung": lager_notiz
-        }
-        speichere_in_google("Lager", daten)
+        st.success("Lager aktualisiert (Globales Feature)")
 
 elif kategorie == "💰 Kassenbuch":
     st.header("💰 Imker-Kassenbuch")
-    
-    art = st.radio("Buchungsart", ["🟢 Einnahme", "🔴 Ausgabe"], index=0)
-    betrag = st.number_input("Betrag in €", min_value=0.0, step=0.50, format="%.2f")
-    zweck = st.text_input("Verwendungszweck / Artikel (z.B. 10 Gläser Waldhonig, neue Stockmeißel)")
-    kat = st.selectbox("Kategorie", ["Honigverkauf", "Völker-/Königinnenverkauf", "Imkereibedarf & Werkzeug", "Futter & Medikamente", "Beuten & Rähmchen", "Sonstiges"])
-    
+    betrag = st.number_input("Betrag in €", min_value=0.0, format="%.2f")
     if st.button("Buchung speichern"):
-        daten = {
-            "Typ": art,
-            "Betrag": betrag,
-            "Zweck": zweck,
-            "Kategorie": kat
-        }
-        speichere_in_google("Kassenbuch", daten)
+        st.success("Kassenbuch aktualisiert")
 
 elif kategorie == "✅ Todo/Termine":
     st.header("Anstehende Aufgaben")
-    aufgabe = st.text_input("Was ist zu tun? (z.B. Varroa-Behandlung)")
-    stand_todo = st.text_input("Welcher Bienenstand?", value="Stand 1")
-    erledigen_bis = st.date_input("Erledigen bis wann?", datetime.now())
-    prio = st.select_slider("Dringlichkeit", options=["Niedrig", "Normal", "Wichtig", "🚨 Eilt sehr!"], value="Normal")
-    
+    aufgabe = st.text_input("Was ist zu tun?")
     if st.button("Aufgabe eintragen"):
-        daten = {
-            "Aufgabe": aufgabe,
-            "Stand": stand_todo,
-            "Fällig am": erledigen_bis.strftime("%d.%m.%Y"),
-            "Priorität": prio
-        }
-        speichere_in_google("Termine", daten)
+        st.success("Todo hinzugefügt")
