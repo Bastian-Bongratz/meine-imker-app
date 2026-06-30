@@ -105,40 +105,62 @@ elif kategorie == "📇 Digitale Stockkarte":
     df_d = lade_historie("Durchschau")
     
     if not df_d.empty and "Volk" in df_d.columns:
+        # --- LOGIK: AUFGELÖSTE VÖLKER FILTERN ---
+        aktive_voelker = []
         alle_voelker = sorted(df_d["Volk"].unique())
-        v_wahl = st.selectbox("Stockkarte für Volk Nr.:", alle_voelker)
         
-        # Tabs für die Übersicht
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 Durchschauen", "🦠 Varroa", "🥣 Fütterung", "🍯 Honig"])
+        for v in alle_voelker:
+            # Hole alle Einträge für dieses Volk
+            volk_daten = df_d[df_d["Volk"] == v]
+            if not volk_daten.empty:
+                # Schaue nach dem allerletzten Eintrag (neuestes Datum steht unten)
+                letzter_eintrag = volk_daten.iloc[-1]
+                bemerkung = str(letzter_eintrag.get("Bemerkung", "")).lower()
+                
+                # Wenn "aufgelöst" NICHT in der letzten Bemerkung steht, ist das Volk aktiv
+                if "aufgelöst" not in bemerkung:
+                    aktive_voelker.append(v)
         
-        with tab1:
-            st.subheader(f"Durchsichten Volk {v_wahl}")
-            st.dataframe(df_d[df_d["Volk"] == v_wahl].iloc[::-1], use_container_width=True)
+        # Falls doch mal ein aufgelöstes Volk gesucht wird, machen wir einen Umschalter
+        zeige_aufgelöste = st.checkbox("Auch aufgelöste Völker anzeigen", value=False)
+        
+        voelker_auswahl = alle_voelker if zeige_aufgelöste else aktive_voelker
+        
+        if not voelker_auswahl:
+            st.warning("Aktuell keine aktiven Völker vorhanden.")
+        else:
+            v_wahl = st.selectbox("Stockkarte für Volk Nr.:", voelker_auswahl)
             
-        with tab2:
-            st.subheader(f"Varroa-Status Volk {v_wahl}")
-            df_v = lade_historie("Varroa")
-            if not df_v.empty:
-                # Filtert Spalte 'Völker' nach der Nummer
-                df_v_gefiltert = df_v[df_v["Völker"].astype(str).str.contains(str(v_wahl))]
-                st.dataframe(df_v_gefiltert.iloc[::-1], use_container_width=True)
-            else: st.write("Keine Daten vorhanden.")
+            # Tabs für die Übersicht
+            tab1, tab2, tab3, tab4 = st.tabs(["📋 Durchschauen", "🦠 Varroa", "🥣 Fütterung", "🍯 Honig"])
+            
+            with tab1:
+                st.subheader(f"Durchsichten Volk {v_wahl}")
+                st.dataframe(df_d[df_d["Volk"] == v_wahl].iloc[::-1], use_container_width=True)
+                
+            with tab2:
+                st.subheader(f"Varroa-Status Volk {v_wahl}")
+                df_v = lade_historie("Varroa")
+                if not df_v.empty:
+                    df_v_gefiltert = df_v[df_v["Völker"].astype(str).str.contains(str(v_wahl))]
+                    st.dataframe(df_v_gefiltert.iloc[::-1], use_container_width=True)
+                else: st.write("Keine Daten vorhanden.")
 
-        with tab3:
-            st.subheader(f"Fütterungen Volk {v_wahl}")
-            df_f = lade_historie("Fütterung")
-            if not df_f.empty:
-                df_f_gefiltert = df_f[df_f["Völker / Stand"].astype(str).str.contains(str(v_wahl))]
-                st.dataframe(df_f_gefiltert.iloc[::-1], use_container_width=True)
-            else: st.write("Keine Daten vorhanden.")
-            
-        with tab4:
-            st.subheader(f"Honigertrag Volk {v_wahl}")
-            df_h = lade_historie("Honigernte")
-            if not df_h.empty:
-                df_h_gefiltert = df_h[df_h["Volk Nr."].astype(str).str.contains(str(v_wahl))]
-                st.dataframe(df_h_gefiltert.iloc[::-1], use_container_width=True)
-            else: st.write("Keine Daten vorhanden.")
+            with tab3:
+                st.subheader(f"Fütterungen Volk {v_wahl}")
+                df_f = lade_historie("Fütterung")
+                if not df_f.empty:
+                    df_f_gefiltert = df_f[df_f["Völker / Stand"].astype(str).str.contains(str(v_wahl))]
+                    st.dataframe(df_f_gefiltert.iloc[::-1], use_container_width=True)
+                else: st.write("Keine Daten vorhanden.")
+                
+            with tab4:
+                st.subheader(f"Honigertrag Volk {v_wahl}")
+                df_h = lade_historie("Honigernte")
+                if not df_h.empty:
+                    df_h_gefiltert = df_h[df_h["Volk Nr."].astype(str).str.contains(str(v_wahl))]
+                    st.dataframe(df_h_gefiltert.iloc[::-1], use_container_width=True)
+                else: st.write("Keine Daten vorhanden.")
     else:
         st.warning("Noch keine Völker in der Datenbank gefunden. Lege erst eine Durchschau an!")
 
@@ -412,4 +434,3 @@ elif kategorie == "✅ Todo/Termine":
             "Priorität": prio
         }
         speichere_in_google("Termine", daten)
-
