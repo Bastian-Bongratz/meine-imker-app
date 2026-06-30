@@ -26,7 +26,6 @@ def speichere_in_volks_tabelle(volk_nr, aktions_typ, daten_dict):
         tabelle = hole_google_tabelle()
         blatt_name = f"Volk_{volk_nr}"
         
-        # Alle denkbaren Spalten für das kombinierte Volksblatt definieren
         alle_spalten = [
             "Datum", "Typ", "Königin vorhanden", "Königin Jahr", "Königin Farbe", 
             "Stifte / Brut", "Sanftmut", "Schwarmstimmung", "Varroa-Mittel", 
@@ -37,23 +36,17 @@ def speichere_in_volks_tabelle(volk_nr, aktions_typ, daten_dict):
         try:
             worksheet = tabelle.worksheet(blatt_name)
         except gspread.exceptions.WorksheetNotFound:
-            # Erstellt ein neues Blatt für das Volk, falls es noch nicht existiert
             worksheet = tabelle.add_worksheet(title=blatt_name, rows="1000", cols="20")
             worksheet.append_row(alle_spalten)
             
-        # Standardzeile vorbereiten (voll mit leeren Werten)
         zeilen_daten = {spalte: "-" for spalte in alle_spalten}
-        
-        # Basis-Daten setzen
         zeilen_daten["Datum"] = datetime.now().strftime("%d.%m.%Y")
         zeilen_daten["Typ"] = aktions_typ
         
-        # Spezifische Werte aus dem übergebenen Dictionary eintragen
         for key, value in daten_dict.items():
             if key in zeilen_daten:
                 zeilen_daten[key] = value
                 
-        # Als Liste in der richtigen Reihenfolge sortieren und anhängen
         eintrag_liste = [zeilen_daten[spalte] for spalte in alle_spalten]
         worksheet.append_row(eintrag_liste)
         
@@ -63,13 +56,11 @@ def speichere_in_volks_tabelle(volk_nr, aktions_typ, daten_dict):
     except Exception as e:
         st.error(f"Fehler beim Speichern: {e}")
 
-# --- ENTFÄLLT NICHT, WIRD FÜR DIE GEÄNDERTE HISTORIE GENUTZT ---
 @st.cache_data(ttl=10)
 def hole_alle_voelker_aus_sheets():
     try:
         tabelle = hole_google_tabelle()
         blätter = tabelle.worksheets()
-        # Filtert alle Blätter heraus, die mit "Volk_" beginnen
         v_liste = [b.title.split("_")[1] for b in blätter if b.title.startswith("Volk_")]
         return sorted([int(x) for x in v_liste if x.isdigit()])
     except Exception:
@@ -115,11 +106,61 @@ def hole_farb_info(jahr):
     return "Unbekannt"
 
 if kategorie == "Dashboard":
-    st.subheader("Übersicht")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Stände", "Stand 1")
-    col2.metric("Todos", "Offen")
-    col3.metric("Termine", "Keine")
+    st.subheader("📋 Standübersicht (Aktuellster Status)")
+    
+    alle_voelker = hole_alle_voelker_aus_sheets()
+    
+    if alle_voelker:
+        gesamt_status = []
+        
+        for v in alle_voelker:
+            df_v = lade_volk_historie(v)
+            if not df_v.empty:
+                # Den allerletzten Eintrag für die Übersicht holen
+                letzter = df_v.iloc[-1]
+                
+                # Suchen nach der letzten echten DURCHSCHAU für Königinnen/Brut-Infos
+                df_nur_d = df_v[df_v["Typ"] == "Durchschau"]
+                letzte_durchschau = df_nur_d.iloc[-1] if not df_nur_d.empty else None
+                
+                k_vorh = letzte_durchschau.get("Königin vorhanden", "-") if letzte_durchschau is not None else "-"
+                stifte_vorh = letzte_durchschau.get("Stifte / Brut", "-") if letzte_durchschau is not None else "-"
+                
+                # Daten für die Dashboard-Tabelle zusammenstellen
+                gesamt_status.append({
+                    "Volk": f"Volk {v}",
+                    "Letzte Aktion": letzter.get("Datum", "-"),
+                    "Typ": letzter.get("Typ", "-"),
+                    "Königin?": k_vorh,
+                    "Brut/Stifte?": stifte_vorh,
+                    "Bemerkung / Status": letzter.get("Bemerkung", "-")
+                })
+        
+        if gesamt_status:
+            df_dashboard = pd.DataFrame(gesamt_status)
+            
+            # Kennzeichnen, ob aktiv oder aufgelöst
+            def markiere_aufgeloest(row):
+                if "aufgelöst" in str(row["Bemerkung / Status"]).lower():
+                    return "🔴 Aufgelöst"
+                return "🟢 Aktiv"
+                
+            df_dashboard["Status"] = df_dashboard.apply(markiere_aufgeloest, axis=1)
+            
+            # Spalten anordnen
+            spalten_reihenfolge = ["Volk", "Status", "Letzte Aktion", "Typ", "Königin?", "Brut/Stifte?", "Bemerkung / Status"]
+            df_dashboard = df_dashboard[spalten_reihenfolge]
+            
+            # Filtern erlauben
+            nur_aktive = st.checkbox("Nur aktive Völker anzeigen", value=True)
+            if nur_aktive:
+                df_dashboard = df_dashboard[df_dashboard["Status"] == "🟢 Aktiv"]
+                
+            st.dataframe(df_dashboard, use_container_width=True, hide_index=True)
+        else:
+            st.info("Noch keine Daten vorhanden.")
+    else:
+        st.warning("Noch keine Völker-Tabellen gefunden. Lege erst eine Durchschau an!")
 
 elif kategorie == "📇 Digitale Stockkarte":
     st.header("📇 Digitale Stockkarte")
@@ -128,7 +169,6 @@ elif kategorie == "📇 Digitale Stockkarte":
     alle_voelker = hole_alle_voelker_aus_sheets()
     
     if alle_voelker:
-        # --- LOGIK: AUFGELÖSTE VÖLKER FILTERN ---
         aktive_voelker = []
         for v in alle_voelker:
             df_v = lade_volk_historie(v)
@@ -148,7 +188,6 @@ elif kategorie == "📇 Digitale Stockkarte":
             df_volk = lade_volk_historie(v_wahl)
             
             if not df_volk.empty:
-                # Filtert das kombinierte Blatt in die jeweiligen Tabs zur Übersicht auf der UI
                 tab1, tab2, tab3, tab4 = st.tabs(["📋 Durchschauen", "🦠 Varroa", "🥣 Fütterung", "🍯 Honig"])
                 
                 with tab1:
@@ -227,7 +266,6 @@ elif kategorie == "🔍 Durchschau":
 
 elif kategorie == "👑 Königinnen-Zucht":
     st.header("👑 Königinnen-Zucht & Umlarv-Planer")
-    # Zucht ist standübergreifend, daher nutzen wir hier die alte Haupt-Logik weiter
     zucht_name = st.text_input("Zuchtserie Bezeichnung", value="Serie 1 - 2026")
     umlarvtag = st.date_input("Umlarvdatum / Start", datetime.now())
     anzahl_larven = st.number_input("Anzahl umgelarvte Larven", min_value=1, value=10, step=1)
@@ -272,7 +310,7 @@ elif kategorie == "🦠 Varroa-Behandlung":
         
     varroa_notiz = st.text_area("Bemerkungen / Wetter")
     
-    if st.button("Varroa-Daten speichern"):
+    if st.button("Varroa-Daten保存"):
         daten = {
             "Varroa-Mittel": behandlung_mittel,
             "Varroa-Menge": menge_varroa,
@@ -283,7 +321,6 @@ elif kategorie == "🦠 Varroa-Behandlung":
 
 elif kategorie == "📋 Bestandsbuch":
     st.header("Amtlicher Arzneimittel-Nachweis")
-    # Amtliches Bestandsbuch bleibt als Gesamtliste bestehen
     v_liste = st.text_input("Welche Völker? (z.B. 1)")
     mittel = st.text_input("Arzneimittel & Charge")
     menge = st.text_input("Dosierung")
@@ -327,7 +364,7 @@ elif kategorie == "🥣 Fütterung":
     futterart = st.selectbox("Futtertyp", ["Sirup (ApiInvert)", "Zuckerwasser 3:2", "Zuckerwasser 1:1", "Futterteig"])
     menge_l = st.number_input("Menge (Liter / kg)", min_value=0.0, step=0.5)
     
-    if st.button("Fütterung speichern"):
+    if st.button("Fütterung保存"):
         daten = {
             "Futtertyp": futterart,
             "Futter-Menge": menge_l
@@ -336,11 +373,10 @@ elif kategorie == "🥣 Fütterung":
 
 elif kategorie == "📦 Lager":
     st.header("Lagerbestand & Inventar")
-    # Lager/Kassenbuch/Todos sind unabh. von einzelnen Völkern und bleiben global
     artikel = st.selectbox("Artikel", ["Zargen", "Rähmchen", "Honiggläser", "Sonstiges"])
     menge_lager = st.number_input("Anzahl", min_value=0, step=1)
     if st.button("Bestand aktualisieren"):
-        st.success("Lager aktualisiert (Globales Feature)")
+        st.success("Lager aktualisiert")
 
 elif kategorie == "💰 Kassenbuch":
     st.header("💰 Imker-Kassenbuch")
