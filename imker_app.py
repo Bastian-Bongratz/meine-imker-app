@@ -182,7 +182,7 @@ elif kategorie == "🔍 Durchschau":
             st.warning("📅 *Hinweis: Lass dem Ableger genug Zeit für die Nachschaffung und den Hochzeitsflug (ca. 21-24 Tage).*")
     
     st.markdown("---")
-    st.stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=1 if ist_ableger else 0)
+    stifte = st.radio("Stifte / Brut vorhanden?", ["Ja", "Nein"], index=1 if ist_ableger else 0)
     sanftmut = st.select_slider("Sanftmut", options=["1", "2", "3", "4", "5"], value="5")
     schwarm = st.select_slider("Schwarmstimmung", options=["1", "2", "3", "4", "5"], value="1")
     notiz = st.text_area("Bemerkung / ToDos")
@@ -412,3 +412,4 @@ elif kategorie == "✅ Todo/Termine":
             "Priorität": prio
         }
         speichere_in_google("Termine", daten)
+
